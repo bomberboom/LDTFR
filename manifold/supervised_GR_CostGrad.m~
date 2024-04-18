@@ -1,0 +1,85 @@
+% Author:
+% - Zeming, Zhou
+%
+% 2020-8-1, ver 0.0.1
+% ref: Joint Normalization and Dimensionality Reduction on Grassmannian: A
+% Generalized Persepctive
+% Tianci Liu, Zelin Shi, and Yunpeng Liu. IEEE Signal Processing Letters,
+% Vol.25, No. 6, 2018
+
+% ����Grassmann Manifold��ά�����Ŀ�꺯���������ݶ�
+% U��ͶӰ����, D*d; U':d*D
+% gnD_Struct:
+% .X: D*n, DΪԭŷ�Ͽռ��ά����nΪ����
+% .y: ��ǩ
+% .r: �µ�ά��=d
+% .Metric_Flag: ������־
+% .G(i,j)��affinity matrix element at (i,j)
+% outCost��Ŀ�꺯��
+% outGrad�������ݶ�
+
+function [outCost,outGrad,gnD_Struct] = supervised_GR_CostGrad(U,gnD_Struct)
+
+% cost function
+outCost = 0;
+% Riemann gradient
+dF = zeros(size(U));
+
+nPoints = length(gnD_Struct.y);
+
+[~, n] = size(gnD_Struct.X(:,:,1));
+
+% compute QR decomposition of U'* gnD_Struct.X
+
+UXR = zeros(gnD_Struct.r,n,nPoints);
+
+
+for tmpC1 = 1:nPoints
+     [~,R] = QR(U'*gnD_Struct.X(:,:,tmpC1));
+    UXR(:,:,tmpC1) = U'*gnD_Struct.X(:,:,tmpC1) / R;
+end
+
+
+
+% compute the cost function and the Eul
+
+for i = 1:nPoints
+    X_i = gnD_Struct.X(:,:,i);
+    for j = 1:nPoints
+        if (gnD_Struct.G(i,j) == 0)
+            continue;
+        end
+        
+        X_j = gnD_Struct.X(:,:,j);
+        switch (gnD_Struct.Metric_Flag)
+
+            case 1
+                %AIRM
+                outCost = outCost + gnD_Struct.G(i,j)*Compute_AIRM_Metric(UXR(:,:,i) , UXR(:,:,j));
+                log_XY_INV = logm(UXR(:,:,i)*inv_UXU(:,:,j));
+                
+                dF = dF + 4*gnD_Struct.G(i,j)*((X_i*U)*inv_UXU(:,:,i)  ...
+                    -(X_j*U)*inv_UXU(:,:,j) )*log_XY_INV;
+             case 2
+                %Stein  metric
+                outCost = outCost + gnD_Struct.G(i,j)*Compute_Stein_Metric(UXR(:,:,i) , UXR(:,:,j));
+                
+                X_ij = 0.5*(X_i + X_j);
+                dF = dF + gnD_Struct.G(i,j)*(2*(X_ij*U)/(U'*X_ij*U)  ...
+                    - (X_i*U)*inv_UXU(:,:,i) - (X_j*U)*inv_UXU(:,:,j));
+            otherwise
+                error('The metric is not implemented.');
+        end %end switch
+        
+    end
+end
+
+
+
+
+
+outGrad = (eye(size(U,1)) - U*U')*dF;
+
+
+end
+
